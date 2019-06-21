@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+#
+# A battery status blocklet script for i3blocks.
+#
+# Copyright (C) 2019 gitbaby
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+set -e
+
+# Required a single argument
+if [ $# -ne 1 ]
+then
+    cat <<EOF
+Usage: ${0##*/} BAT_NUM
+
+EOF
+    exit 1
+fi >&2
+
+# Setup default values
+format="${format:-%status %percentage %remaining}"
+format_down="${format_down:-No battery}"
+status_chr="${status_chr:-CHR}"
+status_bat="${status_bat:-BAT}"
+status_unk="${status_unk:-__empty__}"
+status_full="${status_full:-FULL}"
+path="${path:-/sys/class/power_supply/BAT%d/uevent}"
+low_threshold="${low_threshold:-30}"
+threshold_type="${threshold_type:-time}"
+last_full_capacity="${last_full_capacity:-false}"
+integer_battery_capacity="${integer_battery_capacity:-true}"
+
+uevent="$(printf "$path" "$1")"
+if [[ -f "$uevent" ]]
+then
+
+    fulltext_format="$format"
+
+    uevent="$(cat "$uevent")"
+    eval "${uevent//[[:blank:]]/}"
+
+    if [[ "$last_full_capacity" == true ]]
+    then
+        percentage="$(echo "scale=2; 100 * $POWER_SUPPLY_ENERGY_NOW / $POWER_SUPPLY_ENERGY_FULL" | bc)"
+    else
+        percentage="$(echo "scale=2; 100 * $POWER_SUPPLY_ENERGY_NOW / $POWER_SUPPLY_ENERGY_FULL_DESIGN" | bc)"
+    fi
+
+    if [[ "$integer_battery_capacity" == true ]]
+    then
+        _percentage="${percentage%.*}%"
+    else
+        _percentage="$percentage%"
+    fi
+    
+    case "$POWER_SUPPLY_STATUS" in
+        "Full")
+            _status="$status_full"
+            ;;
+        "Discharging"|"Not charging")
+            _status="$status_bat"
+            ;;
+        "Charging")
+            _status="$status_chr"
+            ;;
+        *)
+            _status="$status_unk"
+            ;;
+    esac
+
+    if [[ "$POWER_SUPPLY_POWER_NOW" -gt 0 ]]
+    then
+        if [[ "$_status" == "$status_chr" ]]
+        then
+            # Charging
+            div="$(echo "$POWER_SUPPLY_ENERGY_FULL - $POWER_SUPPLY_ENERGY_NOW" | bc)"
+        else
+            # Discharging
+            div="$POWER_SUPPLY_ENERGY_NOW"
+        fi
+        remaining_minutes="$(echo "60 * $div / $POWER_SUPPLY_POWER_NOW" | bc)"
+        h="$(echo "$div / $POWER_SUPPLY_POWER_NOW" | bc)"
+        m="$(echo "($remaining_minutes - 60 * $h)" | bc)"
+        _remaining="$(printf "%d:%02d" $h $m)"
+    else
+        _remaining="__empty__"
+    fi
+
+    # Update full text (first line) and remove empty placeholders w/ or w/out a leading space.
+    eval "$(echo "fulltext=\"${fulltext_format//%/\$_}\"")"
+    fulltext="${fulltext// __empty__/}"
+    fulltext="${fulltext//__empty__ /}"
+    fulltext="${fulltext//__empty__/}"
+    echo "$fulltext"
+
+    # Update text color if threshold is reached
+    if [[ "$_status" == "$status_bat" ]]
+    then
+        if [[ "$threshold_type" == "time" ]]
+        then
+            threshold="$remaining_minutes"
+        else
+            threshold="$percentage"
+        fi
+        if [[ "$threshold" -le "$low_threshold" ]]
+        then
+            echo           # empty short text (second line)
+            echo "#ff0000" # text color (third line)
+        fi
+    fi
+
+else
+
+    fulltext_format="$format_down"
+    eval "$(echo "fulltext=\"${fulltext_format//%/\$_}\"")"
+    echo "$fulltext"
+
+fi
+
