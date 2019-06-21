@@ -6,7 +6,7 @@ A battery status blocklet script for i3blocks.
 To use with i3blocks, clone this repository:
 
 ```
-git clone https://github.com/gitbaby/i3blocks-battery ~/.config/i3blocks/i3blocks-battery
+git clone https://github.com/gitbaby/i3blocks-battery.git ~/.config/i3blocks/i3blocks-battery
 ```
 
 Add the following lines into your ~/.config/i3blocks/config file:
