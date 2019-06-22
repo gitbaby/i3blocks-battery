@@ -1,6 +1,8 @@
 # i3blocks-battery
 A battery status blocklet script for i3blocks.
 
+Inspired by https://github.com/gportay/i3blocks-status#battery
+
 # Installation
 
 To use with i3blocks, clone this repository:
